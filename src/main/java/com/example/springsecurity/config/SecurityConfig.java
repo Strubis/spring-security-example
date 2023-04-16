@@ -1,39 +1,32 @@
 package com.example.springsecurity.config;
 
+import com.example.springsecurity.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 @EnableWebSecurity
+@Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private static final Logger LOGGER = LogManager.getLogger(SecurityConfig.class);
     private final JwtAuthFilter jwtAuthFilter;
-
-    private static final List<UserDetails> APPLICATION_USERS = Arrays.asList(
-            new User("teste@gmail.com", "123", Collections.singleton(new SimpleGrantedAuthority("ROLE_ADMIN"))),
-            new User("123@gmail.com", "test", Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")))
-    );
+    private final UserService userService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http){
@@ -42,7 +35,11 @@ public class SecurityConfig {
         try{
             LOGGER.info(METHOD_NAME + ": method started");
             http
-                    .authorizeRequests().anyRequest().authenticated()
+                    .csrf().disable()
+                    .authorizeHttpRequests()
+                    .requestMatchers("/api/v1/auth/**")
+                    .permitAll()
+                    .anyRequest().authenticated()
                     .and()
                     .sessionManagement()
                     .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
@@ -60,21 +57,15 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider(){
         final DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
-        authenticationProvider.setUserDetailsService(userDetailsService());
+        authenticationProvider.setUserDetailsService(userService);
         authenticationProvider.setPasswordEncoder(passwordEncoder());
 
         return authenticationProvider;
     }
 
-    private UserDetailsService userDetailsService() {
-        return new UserDetailsService() {
-            @Override
-            public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-                return APPLICATION_USERS
-                        .stream().filter(user -> user.getUsername().equals(username))
-                        .findFirst().orElseThrow(() -> new UsernameNotFoundException("User not found!"));
-            }
-        };
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
     }
 
     private PasswordEncoder passwordEncoder() {
